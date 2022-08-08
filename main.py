@@ -33,6 +33,8 @@ num_runs = 1000  # Added on to the first run, so total runs will be 1 + num_runs
 seed = 0
 T = 40
 title = "Large Example Uneven Prices"
+np_utility =1
+utilities = [1, ]*num_products
 
 def w_t(t, i, num_products, T):
     return 1/(1 + np.exp(5*(i - num_products*(T - t -1)/(T-1) - 1.5)))
@@ -40,8 +42,8 @@ def w_t(t, i, num_products, T):
 def w_np(t):
     return 1
 
-revenue, inventory_vectors, offered_sets, cumulative_revenue, purchase_probabilities, names = \
-    simulate_period_dependent_preferences(C_i, w_t, w_np, prices, T, num_products, num_runs, seed)
+revenue, inventory_vectors, offered_sets, cumulative_revenue, names = \
+    simulate_single_customer_type(C_i, prices, utilities, np_utility, T, num_products, num_runs, seed)
 
 
 # base_result = dict()
@@ -147,7 +149,7 @@ def plot_finite_difference(cumulative_revenue, num_runs, names):
     fig.set_figheight(7.25)
     plt.show()
 
-plot_finite_difference(cumulative_revenue, num_runs, names)
+# plot_finite_difference(cumulative_revenue, num_runs, names)
 
 def plot_cumulative_revenue(policy_names, cumulative_revenue,num_runs):
     max_value = np.max([np.argmax(cumulative_revenue[x]) for x in range(len(policy_names))])

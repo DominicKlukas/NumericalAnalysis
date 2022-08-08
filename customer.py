@@ -1,3 +1,5 @@
+import numpy as np
+
 class Customer:
     """A class used to represent a customer type
 
@@ -23,45 +25,26 @@ class Customer:
             an integer used to identify the product
         """
         self.products = products
+        self.products_list = sorted(products.keys())
         self.no_purchase_utility = no_purchase_utility
         self.customer_key = customer_key
 
     def customer_decision(self, offered_set, customer_choice):
-        """Returns the customer's choice, from an offered set of products
-
-        Parameters
-        __________
-        offered_set: set
-            product objects, from which the customer is to purchase a product or choose not to purchase a product
-        customer_choice: float
-            float between 0 and 1 which uniquely determines the customer's choice, given offered_set
-
-        Returns
-        _______
-        product
-            Either None, or a product in offered_set which the customer has chosen to purchase
-        """
-        # MNL probability is given by w_i/(w_(np) + sum([w])). Compute this denominator.
-        bam_den = sum(self.products.get(x) for x in offered_set) + self.no_purchase_utility
-        # offered_list will have a unique ordering, since every product has a unique index
-        offered_list = sorted(offered_set)
-        # For each product i, 0 <= (w_(np) + w_1 + ... + w_i)(w_(np) + sum([w])) <= 1.
-        # The customer chooses the smallest product i such that
-        # customer_choice < (w_(np) + w_1 + ... + w_i)(w_(np) + sum([w])), which could also be
-        # the no purchase option, w_(np)
-        # Instead of normalizing the utilities, we simply compute
-        # customer_choice*(w_(np) + sum([w])) < (w_(np) + w_1 + ... + w_i) instead.
-        acc = self.no_purchase_utility
-
-        customer_choice *= bam_den
-        i = -1
-        while acc < customer_choice:
+        if len(offered_set)==0:
+            return None
+        product_utilities = dict()
+        i = 1
+        for p in self.products_list:
+            product_utilities[p] = np.log(self.products[p]) + customer_choice[i]
             i += 1
-            acc += self.products.get(offered_list[i])
-        if i == -1:
+        np_utility = np.log(self.no_purchase_utility) + customer_choice[0]
+        offered_set_utilities = {p : u for p, u in product_utilities.items() if p in offered_set}
+        offered_set_utilities_list = sorted(offered_set_utilities.items(), key=lambda x: (-x[1], -x[0].product_key))
+        chosen_product = offered_set_utilities_list[0][0]
+        if np_utility > product_utilities[chosen_product]:
             return None
         else:
-            return offered_list[i]
+            return chosen_product
 
     def __lt__(self, other):
         return self.customer_key < other.customer_key

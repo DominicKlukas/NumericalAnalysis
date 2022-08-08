@@ -30,24 +30,22 @@ def simulate_single_customer_type(C_i, prices, utilities, np_utility, T, num_pro
     revenue = [0]*len(policies)
     inventory_vectors = [[0]*num_products]*len(policies)
     offered_sets = [[0]*num_products]*len(policies)
-    purchase_probabilities = [[0]*num_products]*len(policies)
     cumulative_revenue = [0]*len(policies)
 
     for i in range(num_runs):
         simulate = SingleCustomerType(T, num_products, np_utility, C_i, utilities, prices, seed + i)
         policies[2] = DPAPolicy(simulate, 1.6)
-        print(i)
+        # print(i)
         for j in range(len(policies)):
             output = simulate.simulation(policies[j])
             revenue[j] = np.add(revenue[j], output[0])
             inventory_vectors[j] = np.add(inventory_vectors[j], output[1])
             offered_sets[j] = np.add(offered_sets[j], output[2])
             cumulative_revenue[j] = np.add(cumulative_revenue[j], output[3])
-            purchase_probabilities[j] = np.add(purchase_probabilities[j], output[4])
 
     for j in range(len(policies)):
         names += [str(policies[j])]
-    return revenue, inventory_vectors, offered_sets, cumulative_revenue, purchase_probabilities, names
+    return revenue, inventory_vectors, offered_sets, cumulative_revenue, names
 
 
 def simulate_period_dependent_preferences(C_i, w_t, w_np, prices, T, num_products, num_runs, seed):
