@@ -50,11 +50,26 @@ def dirichlet_list(dimension, variance, length):
 
 
 class DynamicAssortmentOptimizationProblem:
-    def __init__(self, products, initial_inventory, sale_horizon, customer_decision_seed):
-        self.products = products
+    def __init__(self, product_list, initial_inventory, arriving_customer_type, seed):
+        location = -np.euler_gamma
+        np.random.seed(seed)
+        product_utilities = []
+        no_purchase_utilities = []
+        T = len(arriving_customer_type)
+        for t in range(T):
+            product_utility_dict = dict() # stores the utility values for customer arriving at period t
+            for p in product_list:
+                # Here, we use a phi value of 1. Check revenue management and pricing analytics by topaloglu,
+                # chapter 4.4, to see that this following expression (with phi 1) gives the desired probabilities
+                # so that the attraction values match the attraction values given by the customer
+                product_utility_dict[p] = np.log(arriving_customer_type[t].products[p]) + np.random.gumbel(location, 1)
+            no_purchase_utilities += [np.random.gumbel(location, 1)]
+            product_utility_dict = sorted(product_utility_dict.items(), key=lambda x: (-x[1], -x[0].product_key))
+            product_utilities += [product_utility_dict]
+        self.product_utilities = product_utilities
+        self.no_purchase_utilities = no_purchase_utilities
         self.initial_inventory = initial_inventory
-        self.sale_horizon = sale_horizon
-        self.customer_decision_seed = customer_decision_seed
+        self.arriving_customer_type = arriving_customer_type
 
     def simulation(self, policy):
         revenue = 0
@@ -71,9 +86,16 @@ class DynamicAssortmentOptimizationProblem:
         cumulative_revenue = [0]
         # No longer for graphing
 
-        for t in range(len(self.sale_horizon)):
-            offered_set = policy.offer_set(inventory, self.initial_inventory, t, self.sale_horizon)
-            product_chosen = self.sale_horizon[t].customer_decision(offered_set, self.customer_decision_seed[t])
+        T = len(self.arriving_customer_type)
+
+        for t in range(T):
+            offered_set = policy.offer_set(inventory, self.initial_inventory, t, self.arriving_customer_type)
+            offered_product_utilities = [(p, v) for p,v in self.product_utilities[t] if p in offered_set]
+            if len(offered_set) == 0 or offered_product_utilities[0][1] < self.no_purchase_utilities[t]:
+                product_chosen = None
+            else:
+                product_chosen = offered_product_utilities[0][0]
+
 
             # This stuff is for graphing
             inventory_vectors += [
@@ -81,7 +103,7 @@ class DynamicAssortmentOptimizationProblem:
                  range(num_products)]]
             offered_set_vector += [
                 [1 if key_product_dict[i] in offered_set or key_product_dict[i] not in inventory
-                      or self.sale_horizon[t].products[key_product_dict[i]] == 0 else 0 for i in range(num_products)]]
+                      or self.arriving_customer_type[t].products[key_product_dict[i]] == 0 else 0 for i in range(num_products)]]
 
             if product_chosen is not None:
                 revenue += product_chosen.price
@@ -97,27 +119,22 @@ class DynamicAssortmentOptimizationProblem:
 
 class SingleCustomerType(DynamicAssortmentOptimizationProblem):
     """Single Customer Type"""
-    def __init__(self, T, num_products, np_utility, C_i, utilities, prices, seed):
+    def __init__(self, T, num_products, C_i, attractions, prices, seed):
         # Initialize the products, setting the product prices and initial inventory capacities
-        products = set()
+        product_list = []
         for i in range(num_products):
-            products.add(Product(i, prices[i]))
-        product_list = sorted(products)
+            product_list += [Product(i, prices[i])]
         initial_inventory = dict()
         k = 0
         for x in product_list:
             initial_inventory[x] = C_i[k]
             k += 1
 
-        # Use the customer types to initialize the
-        product_utility_dict = dict(zip(product_list, utilities))
-        customer = Customer(product_utility_dict, np_utility, 0)
-        sale_horizon = [customer] * T
+        product_attraction_dict = dict(zip(product_list, attractions))
+        customer = Customer(product_attraction_dict, 0)
+        arriving_customer_type = [customer] * T
 
-        location = -np.euler_gamma
-        np.random.seed(seed)
-        customer_decision_seed = [np.random.gumbel(location, 1, num_products + 1) for i in range(T)]
-        super().__init__(products, initial_inventory, sale_horizon, customer_decision_seed)
+        super().__init__(product_list, initial_inventory, arriving_customer_type, seed)
 
     def __str__(self):
         return "Single Customer Type"
@@ -144,9 +161,8 @@ class MultipleCustomerTypes(DynamicAssortmentOptimizationProblem):
         np.random.seed(seed)
         dirlist = dirichlet_list(num_products, C_v, T)
         customer_list = sorted(customers)
-        sale_horizon = [customer_list[x] for x in dirlist]
-        customer_decision_seed = np.random.uniform(0, 1, T)
-        super().__init__(products, initial_inventory, sale_horizon, customer_decision_seed)
+        arriving_customer_type = [customer_list[x] for x in dirlist]
+        super().__init__(product_list, initial_inventory, arriving_customer_type, seed)
 
     def __str__(self):
         return "Multiple Customer Types"

@@ -24,7 +24,9 @@ def simulate_single_customer_type(C_i, prices, utilities, np_utility, T, num_pro
     policies += [OfferEverything()]
     policies += [IBPolicy(psi_eib, "Inventory Balancing")]
     policies += [None]
-    # policies += [TopalogluDPOptimal(C_i, prices, utilities, np_utility, T)]
+    policies += [None]
+    policies += [TopalogluDPOptimal(C_i, prices, utilities, np_utility, T)]
+
 
     names = []
     revenue = [0]*len(policies)
@@ -33,9 +35,10 @@ def simulate_single_customer_type(C_i, prices, utilities, np_utility, T, num_pro
     cumulative_revenue = [0]*len(policies)
 
     for i in range(num_runs):
-        simulate = SingleCustomerType(T, num_products, np_utility, C_i, utilities, prices, seed + i)
-        policies[2] = DPAPolicy(simulate, 1.6)
-        # print(i)
+        simulate = SingleCustomerType(T, num_products, C_i, utilities, prices, seed + i)
+        policies[2] = Clairvoyant(simulate)
+        policies[3] = DPAPolicy(simulate, 1.6)
+        print(i)
         for j in range(len(policies)):
             output = simulate.simulation(policies[j])
             revenue[j] = np.add(revenue[j], output[0])

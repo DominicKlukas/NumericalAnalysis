@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.sparse import *
 from decimal import *
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -345,8 +346,8 @@ def maximum_revenue_set(customer, adjusted_prices_sorted):
     # (the previous numerator) to calculate the numerator for each set and w_j to w_np + w_1 + ... + w_(j-1)
     # to calculate the next denominator.
 
-    # expected revenue denominator
-    utility_sum = customer.no_purchase_utility
+    # expected revenue denominator. We use a convention in this program that the no purchase probability is always 0
+    utility_sum = 1
     # expected revenue numerator
     offer_set_adjusted_revenue = 0
     max_revenue = 0
@@ -452,16 +453,15 @@ class DPAPolicy:
         theta: float
             tuning parameter used to calculate the gamma values. Adjusts the opportunity cost of losing inventory.
         """
-        sale_horizon = problem_instance.sale_horizon
-        products = problem_instance.products
+        arriving_customer_type = problem_instance.arriving_customer_type
         initial_inventory = problem_instance.initial_inventory
-        T = len(sale_horizon)
+        T = len(arriving_customer_type)
 
         # This is the gamma vector, which is calculated with a recursion.
         # Thus, we need one more period.
         gamma = [dict() for x in range(T + 1)]
         # Initializing the recursion
-        for p in products:
+        for p in initial_inventory:
             gamma[T][p] = 0
 
         # Recursion step
@@ -470,18 +470,18 @@ class DPAPolicy:
             t = T - i - 1
             # See how gamma is calculated in the paper, section 4.1. Calculate the adjusted revenue for each product
             # and put it in a dictionary
-            adjusted_prices = dict((x, (x.price - theta * gamma[t + 1][x] / initial_inventory[x])) for x in products)
+            adjusted_prices = dict((x, (x.price - theta * gamma[t + 1][x] / initial_inventory[x])) for x in initial_inventory)
             # Compute the "expected set" which we will use to calculate the purchase probabilities
             adjusted_prices_sorted = sorted(adjusted_prices.items(), key=lambda x: (-x[1], -x[0].product_key))
-            max_set = maximum_revenue_set(sale_horizon[t], adjusted_prices_sorted)
+            max_set = maximum_revenue_set(arriving_customer_type[t], adjusted_prices_sorted)
             # Calculate the numerator for the probability calculation
-            utility_sum = sum(sale_horizon[t].products[p] for p in max_set)
-            for p in products:
+            utility_sum = sum(arriving_customer_type[t].products[p] for p in max_set)
+            for p in initial_inventory:
                 if p in max_set:
                     # We split up the expression for gamma in two for readability
                     arg = p.price - theta * gamma[t + 1][p] / initial_inventory[p]
                     # This is the expression for the gamma recursion
-                    gamma[t][p] = (sale_horizon[t].products[p] / utility_sum) * arg + gamma[t + 1][p]
+                    gamma[t][p] = (arriving_customer_type[t].products[p] / utility_sum) * arg + gamma[t + 1][p]
                 else:
                     gamma[t][p] = gamma[t + 1][p]
         self.gamma = gamma
@@ -513,8 +513,6 @@ class DPAPolicy:
             has length of the selling horizon, with a product for each element, where an element represents a period
         """
         adjusted_prices = dict()
-        # H_i = sum(self.gamma[t + 1].get(p) * self.basis_function(p, inventory, initial_inventory)
-        # for p in inventory)
         # Compute the adjusted revenue for each product, using the expression from the paper: r_i - H_f - H_i
         # In the case where each product uses one unique resource,
         # r_i + H_f - H_i = r_i - gamma(t+1)[x](phi(x_f)-phi(x_i))
@@ -524,8 +522,6 @@ class DPAPolicy:
             else:
                 final_inventory = inventory.copy()
                 final_inventory[x] = inventory[x] - 1
-                # H_f = H_i - self.gamma[t + 1].get(x) * self.basis_function(x, inventory, initial_inventory)
-                # H_f += self.gamma[t + 1].get(x) * self.basis_function(x, final_inventory, initial_inventory)
                 adjusted_prices[x] = x.price - self.gamma[t + 1].get(x) * self.basis_function(x, inventory,
                                                                                               initial_inventory) + \
                                      self.gamma[t + 1].get(x) * self.basis_function(x, final_inventory,
@@ -535,3 +531,80 @@ class DPAPolicy:
 
     def __str__(self):
         return "DPA Algorithm"
+
+class Clairvoyant:
+    def __init__(self, problem_instance):
+        sale_decisions = []
+        product_utilities = problem_instance.product_utilities # ordered list
+        no_purchase_utilities = problem_instance.no_purchase_utilities
+        initial_inventory = problem_instance.initial_inventory
+        key_product_dict = {p.product_key:p for p in initial_inventory}
+        T = len(product_utilities)
+        num_products = len(initial_inventory)
+        customers = []
+        for t in range(T):
+            customer = []
+            i = 0
+            while i < num_products and product_utilities[t][i][1] > no_purchase_utilities[t]:
+                customer += [product_utilities[t][i][0].product_key]
+                i += 1
+            customers += [customer]
+
+        # In the offer everything paper, each product, and customer, has a node. There is a node from a customer
+        # to a product as long as the utility of that product is higher than the no purchase utility.
+        product_node_index = dict()
+        node_index_product = dict()
+
+        i = T
+        for p in initial_inventory:
+            product_node_index[p.product_key] = i
+            node_index_product[i] = p
+            i += 1
+
+        source_index = i
+        sink_index = i + 1
+
+        na_matrix_rows = []
+        na_matrix_cols = []
+        na_matrix_data = []
+
+        for t in range(T):
+            for p in customers[t]:
+                na_matrix_rows += [t]
+                na_matrix_cols += [product_node_index[p]]
+                na_matrix_data += [1]
+
+        for t in range(T):
+            na_matrix_rows += [source_index]
+            na_matrix_cols += [t]
+            na_matrix_data += [1]
+
+        for p, x in initial_inventory.items():
+            na_matrix_rows += [product_node_index[p.product_key]]
+            na_matrix_cols += [sink_index]
+            na_matrix_data += [x]
+
+        na_matrix = csr_matrix((na_matrix_data, (na_matrix_rows, na_matrix_cols)),
+                               shape=(sink_index + 1, sink_index + 1))
+
+        flow = csgraph.maximum_flow(na_matrix, source_index, sink_index)
+        graph = flow.residual
+        dictionary_of_keys_graph = graph.todok()
+        graph_edges = dictionary_of_keys_graph.keys()
+        graph_dictionary = dict()
+        for k in graph_edges:
+            graph_dictionary[k] = dictionary_of_keys_graph.get(k)
+        offer_sets = []
+        for t in range(T):
+            period_t_set = set()
+            for x in customers[t]:
+                if graph_dictionary[(t, product_node_index[x])] == 1:
+                    period_t_set.add(key_product_dict[x])
+            offer_sets += [period_t_set]
+        self.offer_sets = offer_sets
+
+    def offer_set(self, inventory, initial_inventory, t, sale_horizon):
+        return self.offer_sets[t]
+
+    def __str__(self):
+        return "Clairvoyant"

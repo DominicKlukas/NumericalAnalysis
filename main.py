@@ -31,10 +31,10 @@ prices = [1, ]*num_products
 LF = 1
 num_runs = 1000  # Added on to the first run, so total runs will be 1 + num_runs
 seed = 0
-T = 40
+T = 25
 title = "Large Example Uneven Prices"
 np_utility =1
-utilities = [1, ]*num_products
+utilities = [i+1 for i in range(num_products)]
 
 def w_t(t, i, num_products, T):
     return 1/(1 + np.exp(5*(i - num_products*(T - t -1)/(T-1) - 1.5)))
