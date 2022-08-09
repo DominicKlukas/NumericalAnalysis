@@ -2,13 +2,14 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
+colors = ['C3', 'C4', 'C2', 'C3', 'C4']
+
 def graph_inventory_plots(inventory_vectors, names, offered_sets, cumulative_revenue):
     figure, axis = plt.subplots(len(names)+1, 1)
     plt.subplots_adjust(hspace=0.8)
     figure.set_figwidth(12)
     figure.set_figheight(7)
     line_styles = ["solid", "dashed", "dotted"]
-    colors = ['C3', 'C4', 'C2', 'C3', 'C4']
     for x in range(len(names)):
         axis[len(names)].plot(cumulative_revenue[x][:-1], label=names[x], linestyle=line_styles[x], color=colors[x],
                               linewidth=2.5)
@@ -45,9 +46,9 @@ def graph_inventory_plots(inventory_vectors, names, offered_sets, cumulative_rev
 def plot_cumulative_revenue(policy_names, cumulative_revenue,num_runs):
     max_value = np.max([np.argmax(cumulative_revenue[x]) for x in range(len(policy_names))])
     fig = plt.figure()
-    colors = ['C3', 'C4', 'C2', 'C1', 'C5']
     for i in range(len(policy_names)):
-        plt.plot(cumulative_revenue[i]/num_runs, label=policy_names[i], color=colors[i])
+        function = [cumulative_revenue[i][x]/num_runs for x in range(len(cumulative_revenue[i]))]
+        plt.plot(function, label=policy_names[i], color=colors[i])
     plt.title("Average Revenue vs Period", pad=20, size=25)
     plt.xlabel("Period", size=15)
     plt.ylabel("Average Revenue", size=15)
@@ -60,7 +61,6 @@ def plot_cumulative_revenue(policy_names, cumulative_revenue,num_runs):
 
 def plot_finite_difference(cumulative_revenue, num_runs, names):
     differences = []
-    colors = ['C3', 'C4', 'C2', 'C1', 'C5']
     fig = plt.figure()
     for x in range(len(names)):
         differences += [
@@ -77,34 +77,55 @@ def plot_finite_difference(cumulative_revenue, num_runs, names):
     plt.show()
 
 
-def plot_revenue_vs(output, num_runs): #Exclude the optimal policy
-    base_result, names = output
-    names = ["OE", "IB", "DPA", "OP"]
-    domain = sorted(base_result.keys())
-    print(domain)
-    for i in range(len(names)-1):
-        function = [base_result[x][i] / num_runs for x in domain]
-        plt.plot(domain, function, label=names[i])
+def plot_revenue_vs(revenue_vs_parameter, policy_names, parameter_name, num_runs, tick_size):
+    """
+    Graphs the performance of the policies relative to another policy
+    Parameters
+    __________
+    revenue_vs_parameter: dict
+        with each tested parameter value as keys, and list containing the revenue for each policy at that
+        tested parameter value as a dictionary value
+    policy_names: list
+        of policy names, with the indexing corresponding to the indexing of the revenue lists
+    parameter_name: string
+        name of the parameter being tested, for display on the graph
+    """
+    domain = sorted(revenue_vs_parameter.keys())
+    for i in range(len(policy_names)):
+        function = [revenue_vs_parameter[x][i] / num_runs for x in domain]
+        plt.plot(domain, function, label=policy_names[i])
     plt.grid()
     plt.legend()
-    plt.xticks(np.arange(min(domain), max(domain), 0.05))
-    plt.xlabel("Base of Exponential", size=10)
-    plt.ylabel("Average Revenue", size=10)
-    plt.title("Base of Exponential vs Average Revenue", size=15)
+    plt.xticks(np.arange(min(domain), max(domain), tick_size))
+    plt.xlabel(parameter_name, size=12.5)
+    plt.ylabel("Average Revenue", size=12.5)
+    plt.title(parameter_name + " vs Average Revenue", size=15)
     plt.show()
 
 
-def plot_ratio_optimal(output):
-    base_result, names = output
-    domain = sorted(base_result.keys())
-    names = ["OE", "IB", "DPA", "OP"]
-    for i in range(len(names)-1):
-        function = [base_result[x][i]/base_result[x][2] for x in domain]
-        plt.plot(domain, function, label=names[i])
+def plot_ratio_optimal(revenue_vs_parameter, policy_names, parameter_name, baseline_policy_index, tick_size):
+    """
+    Graphs the performance of the policies relative to another policy
+    Parameters
+    __________
+    revenue_vs_parameter: dict
+        with each tested parameter value as keys, and list containing the revenue for each policy at that
+        tested parameter as a value
+    policy_names: list
+        list of policy names, with the indexing corresponding to the indexing of the revenue lists
+    parameter_name: string
+        name of the parameter being tested, for display on the graph
+    baseline_policy_index: integer
+        index of the policy that the other policies are being compared to
+    """
+    domain = sorted(revenue_vs_parameter.keys())
+    for i in range(len(policy_names)):
+        function = [revenue_vs_parameter[x][i]/revenue_vs_parameter[x][baseline_policy_index] for x in domain]
+        plt.plot(domain, function, label=policy_names[i])
     plt.grid()
     plt.legend()
-    plt.xticks(np.arange(min(domain), max(domain), 0.05))
-    plt.xlabel("Base of Exponential", size=10)
-    plt.ylabel("Performance Ratio", size=10)
-    plt.title("Base of Exponential vs Performance Ratio", size=15)
+    plt.xticks(np.arange(min(domain), max(domain), tick_size))
+    plt.xlabel(parameter_name, size=12.5)
+    plt.ylabel("Performance Ratio", size=12.5)
+    plt.title(parameter_name + " vs Performance Ratio", size=15)
     plt.show()

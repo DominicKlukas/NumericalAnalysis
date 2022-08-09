@@ -137,7 +137,7 @@ class TopalogluDPOptimal:
         return {product_key_product_dict[x] for x in self.offer_sets[t][inventory_tuple]}
 
     def __str__(self):
-        return "Optimal Dynamic Program"
+        return "DPO"
 
 
 
@@ -211,7 +211,7 @@ class DPOptimal2:
         return self.offer_sets[t][inventory_tuple]
 
     def __str__(self):
-        return "DP Optimal"
+        return "DPO"
 
 
 class DPOptimal:
@@ -294,7 +294,7 @@ class DPOptimal:
         return offer_set
 
     def __str__(self):
-        return "DP Optimal"
+        return "DPO"
 
 
 class OfferEverything:
@@ -315,10 +315,10 @@ class OfferEverything:
         return inventory.keys()
 
     def __repr__(self):
-        return "OFE"
+        return "OE"
 
     def __str__(self):
-        return "Offer Everything"
+        return "OE"
 
 
 def maximum_revenue_set(customer, adjusted_prices_sorted):
@@ -384,7 +384,7 @@ class IBPolicy:
         the name of the policy, considering the balancing function we are using
     """
 
-    def __init__(self, balancing_function, policy_name):
+    def __init__(self, balancing_function):
         """
         Parameters
         __________
@@ -394,9 +394,8 @@ class IBPolicy:
             the name of the policy, considering the balancing function we are using
         """
         self.balancing_function = balancing_function
-        self.policy_name = policy_name
 
-    def offer_set(self, inventory, initial_inventory, t, sale_horizon):
+    def offer_set(self, inventory, initial_inventory, t, arriving_customer_type):
         """
         Makes a product assortment decision, for which products to offer the customer arriving at period t
 
@@ -417,13 +416,13 @@ class IBPolicy:
         adjusted_prices = dict((x, self.balancing_function(inventory.get(x) / initial_inventory.get(x)) * x.price)
                                for x in inventory)
         adjusted_prices_sorted = sorted(adjusted_prices.items(), key=lambda x: (-x[1], -x[0].product_key))
-        return maximum_revenue_set(sale_horizon[t], adjusted_prices_sorted)
+        return maximum_revenue_set(arriving_customer_type[t], adjusted_prices_sorted)
 
     def __repr__(self):
-        return self.policy_name
+        return "IB"
 
     def __str__(self):
-        return self.policy_name
+        return "IB"
 
 
 class DPAPolicy:
@@ -498,7 +497,7 @@ class DPAPolicy:
         inventory and its starting inventory."""
         return self.function(inventory.get(product) / initial_inventory.get(product))
 
-    def offer_set(self, inventory, initial_inventory, t, sale_horizon):
+    def offer_set(self, inventory, initial_inventory, t, arriving_customer_type):
         """Makes a product assortment decision, for which products to offer the customer arriving at period t
 
         Parameters
@@ -527,10 +526,11 @@ class DPAPolicy:
                                      self.gamma[t + 1].get(x) * self.basis_function(x, final_inventory,
                                                                                     initial_inventory)
         adjusted_prices_sorted = sorted(adjusted_prices.items(), key=lambda x: (-x[1], -x[0].product_key))
-        return maximum_revenue_set(sale_horizon[t], adjusted_prices_sorted)
+        return maximum_revenue_set(arriving_customer_type[t], adjusted_prices_sorted)
 
     def __str__(self):
-        return "DPA Algorithm"
+        return "DPA"
+
 
 class Clairvoyant:
     """ Class implementing the clairvoyant policy, which knows the decisions the customers will make in advance
@@ -652,4 +652,4 @@ class Clairvoyant:
         return self.offer_sets[t]
 
     def __str__(self):
-        return "Clairvoyant"
+        return "CLV"
