@@ -360,9 +360,9 @@ def maximum_revenue_set(customer, adjusted_prices_sorted):
         if product[1] <= max_revenue:
             break
         # calculate the next denominator
-        utility_sum += customer.products.get(product[0])
+        utility_sum += customer.product_attractions[product[0]]
         # calculate the next numerator
-        offer_set_adjusted_revenue += product[1] * customer.products.get(product[0])
+        offer_set_adjusted_revenue += product[1] * customer.product_attractions[product[0]]
         expected_revenue = offer_set_adjusted_revenue / utility_sum
         # We store the expected revenue maximizing set by storing the last product, that is, the product with
         # the lowest adjusted revenue which should still be included in the set, and then simply include all products
@@ -475,13 +475,13 @@ class DPAPolicy:
             adjusted_prices_sorted = sorted(adjusted_prices.items(), key=lambda x: (-x[1], -x[0].product_key))
             max_set = maximum_revenue_set(arriving_customer_type[t], adjusted_prices_sorted)
             # Calculate the numerator for the probability calculation
-            utility_sum = sum(arriving_customer_type[t].products[p] for p in max_set)
+            utility_sum = sum(arriving_customer_type[t].product_attractions[p] for p in max_set)
             for p in initial_inventory:
                 if p in max_set:
                     # We split up the expression for gamma in two for readability
                     arg = p.price - theta * gamma[t + 1][p] / initial_inventory[p]
                     # This is the expression for the gamma recursion
-                    gamma[t][p] = (arriving_customer_type[t].products[p] / utility_sum) * arg + gamma[t + 1][p]
+                    gamma[t][p] = (arriving_customer_type[t].product_attractions[p] / utility_sum) * arg + gamma[t + 1][p]
                 else:
                     gamma[t][p] = gamma[t + 1][p]
         self.gamma = gamma
@@ -533,14 +533,42 @@ class DPAPolicy:
         return "DPA Algorithm"
 
 class Clairvoyant:
+    """ Class implementing the clairvoyant policy, which knows the decisions the customers will make in advance
+
+    Attributes
+    __________
+    offer_set: list
+        with the same length as the selling horizon, and each element contains a set to offer the customers each period
+    """
     def __init__(self, problem_instance):
-        sale_decisions = []
-        product_utilities = problem_instance.product_utilities # ordered list
+        """
+        Parameters
+        __________
+        problem_instance: DynamicAssortmentOptimizationProblem
+            contains attributes:
+                product_utilities: list
+                    where each element is a list of ordered pairs, where the first element is a product and the second
+                    element of the ordered pair is the utility value for the arriving customer. The list is in descending
+                    order of utility
+                no_purchase_utilities: list
+                    where each element is the utility of not making a purchase, each period
+                initial_inventory: dictionary
+                    where the keys are the products and the values are the initial inventory values
+        """
+        product_utilities = problem_instance.product_utilities
         no_purchase_utilities = problem_instance.no_purchase_utilities
         initial_inventory = problem_instance.initial_inventory
+        # The scipy sparse matrix stores each product as an index. This dictionary lets us access the product
+        # afterwards with each of the indices
         key_product_dict = {p.product_key:p for p in initial_inventory}
         T = len(product_utilities)
         num_products = len(initial_inventory)
+
+        # Each arriving customer has a set of products he is willing to buy: the products whose utilities crystallized
+        # to a value higher than the value the no purchase utility crystallized to.
+        # In the paper, the customers are grouped by type, and assigned a population, with one node per type
+        # in the graph. However, we keep them separate so that we can see which product gets sold each period, and
+        # directly compare this information with the other policies.
         customers = []
         for t in range(T):
             customer = []
@@ -551,23 +579,37 @@ class Clairvoyant:
             customers += [customer]
 
         # In the offer everything paper, each product, and customer, has a node. There is a node from a customer
-        # to a product as long as the utility of that product is higher than the no purchase utility.
+        # to a product as long as the utility of that product is higher than the no purchase utility, that is,
+        # if the customer is potentially willing to buy the product if no other more favourable products are available.
+        # Now, in the matrix, each node is represented by an index. If there are m customers, we let the node indices
+        # of the customers be 0, ..., m-1. For the n products, we let m, ..., m+n-1 be the node indices of products
+        # These dictionaries allow us to access the product keys from the node indices, and vice versa.
         product_node_index = dict()
         node_index_product = dict()
 
+        # There are T customers, so we assign node indices T to T+n to the products.
         i = T
         for p in initial_inventory:
             product_node_index[p.product_key] = i
             node_index_product[i] = p
             i += 1
 
+        # The flow problem will have a single sink and a single source. The source is connected to the
+        # customers, the customers are connected to the products which they are willing to buy,
+        # and the sink is connected to the products. A customer buys a product if there is some flow
+        # going from that customer to a product. Each customer can only buy one product, so there is an
+        # arc capacity limit of 1 from the source node to each customer node.
         source_index = i
         sink_index = i + 1
 
+        # All three of these lists will have the same length. For any index i, the rows list entry i
+        # is the index of the source node of the edge, the column list entry contains the index of the
+        # sink node, and the data list entry i contains the arc capacity for that edge.
         na_matrix_rows = []
         na_matrix_cols = []
         na_matrix_data = []
 
+        # generate the edges as described
         for t in range(T):
             for p in customers[t]:
                 na_matrix_rows += [t]
@@ -584,16 +626,19 @@ class Clairvoyant:
             na_matrix_cols += [sink_index]
             na_matrix_data += [x]
 
+        # create and solve the matrix
         na_matrix = csr_matrix((na_matrix_data, (na_matrix_rows, na_matrix_cols)),
                                shape=(sink_index + 1, sink_index + 1))
-
-        flow = csgraph.maximum_flow(na_matrix, source_index, sink_index)
-        graph = flow.residual
-        dictionary_of_keys_graph = graph.todok()
+        dictionary_of_keys_graph = csgraph.maximum_flow(na_matrix, source_index, sink_index).residual.todok()
+        # convert the dictionary of keys scipy cs-graph format into a real dictionary
         graph_edges = dictionary_of_keys_graph.keys()
         graph_dictionary = dict()
         for k in graph_edges:
             graph_dictionary[k] = dictionary_of_keys_graph.get(k)
+        # We loop through the edges. For all the edges from a given customer to products, at most one of them will
+        # not be 0. We search these edges, and if one of them has flow 1, then it means that the optimal solution
+        # has the customer arriving at period t buy that product, so we add it as the sole member of the set offered
+        # that period, so that the customer doesn't buy any other products instead
         offer_sets = []
         for t in range(T):
             period_t_set = set()

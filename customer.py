@@ -11,7 +11,7 @@ class Customer:
         an integer used to identify the product
     """
 
-    def __init__(self, products, customer_key):
+    def __init__(self, customer_key, product_attractions):
         """
         Parameters
         __________
@@ -20,7 +20,7 @@ class Customer:
         customer_key: int
             an integer used to identify the product
         """
-        self.products = products
+        self.product_attractions = product_attractions
         self.customer_key = customer_key
 
     def __lt__(self, other):

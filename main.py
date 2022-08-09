@@ -5,56 +5,101 @@ import sys
 from os.path import isfile
 import os
 import cProfile
-from image_handling import *
-from graph_all_inventory_vectors import *
+from graphing_functions import *
 from simulation import *
 import matplotlib.pyplot as plt
 import pickle
+np.set_printoptions(threshold=sys.maxsize)
 
-def roundit(x):
-    if x > 0:
-        return int(x)
-    else:
-        return -1 * int(np.abs(x))
+
+# Methods for Graphing
 
 
 # Whenever you have a list, ensure that the product's key is equal to the product's index in the list.
-np.set_printoptions(threshold=sys.maxsize)
+# This is required by TopalogluDPOptimal
 
-final_revenue = dict()
-# Problem Setup
+# Parameters required for a simulation
+# Customer types
+# Distribution of customer types over product horizon
+# Number of products, with prices, and initial inventory levels
+# Number of runs and seed
+
 num_products = 5
-
-C_i = [4, ]*num_products
+initial_inventory = [4, ] * num_products
 C_v = 1
-prices = [1, ]*num_products
-LF = 1
-num_runs = 1000  # Added on to the first run, so total runs will be 1 + num_runs
+prices = [1, ] * num_products
+num_runs = 1000
+attractions = [[1,]*num_products]
 seed = 0
-T = 25
+T = 40
 title = "Large Example Uneven Prices"
-np_utility =1
-utilities = [i+1 for i in range(num_products)]
 
-def w_t(t, i, num_products, T):
-    return 1/(1 + np.exp(5*(i - num_products*(T - t -1)/(T-1) - 1.5)))
 
-def w_np(t):
-    return 1
+def single_customer_type(customer_list, seed):
+    return [customer_list[0]]*T
+
+
+def randomize_multiple_customer_types(customer_list, variance, T, seed):
+    """
+    Returns a list containing a set of integers, randomly distributed
+
+    Parameters
+    __________
+    dimension: integer
+        each element contains an integer between 0 and dimension-1
+    variance: float
+        the variance of the dirichlet distribution is given by variance*dimension, as described in this
+        paper https://doi.org/10.1287/mnsc.2014.1939
+    length: integer
+        the length of the list
+
+    Returns
+    _______
+    a list where each element contains an integer between 0 and dimension-1, and these integers are chosen
+    randomly, where the amount each integer shows up in the list is given by a dirichlet distribution, and the elements
+    are randomly permuted.
+    """
+    # Converts the variance into the required input parameter for the dirichlet distribution
+    # that will achieve that variance
+    num_customers = len(customer_list)
+    a = (1 / num_customers) * ((num_customers - 1) / variance ** 2 - 1)
+    alpha = (a,) * num_customers
+
+    def return_function(customer_list, seed):
+        np.random.seed(seed)
+        c = np.random.dirichlet(alpha, 1)[0]
+        # we have to scale the dirichlet distribution to the length of the list. Each entry in the dirichlet vector
+        # is the number of times that the index of that entry shows up in the final list. We round the output, since
+        # this must be an integer.
+        c *= T
+        c = np.round(c).astype(int)
+        # as a result of the rounding, the parameters may no longer sum to length of the list, so we adjust
+        while np.sum(c) > T:
+            c[np.argmax(c)] -= 1
+        while np.sum(c) < T:
+            c[np.argmin(c)] += 1
+        z = []
+        y = 0
+        for x in c:
+            z += [y] * x
+            y += 1
+        # After putting the correct quantities of each integer in a list, we permute the integers
+        z = np.random.permutation(z)
+        arriving_customer_types = [customer_list[z[t]] for t in range(T)]
+        return arriving_customer_types
+    return return_function
 
 revenue, inventory_vectors, offered_sets, cumulative_revenue, names = \
-    simulate_single_customer_type(C_i, prices, utilities, np_utility, T, num_products, num_runs, seed)
+    simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
 
 
-# base_result = dict()
-# for a in np.arange(0, 4.5, 0.5):
-#     utilities = [[1/(1 + np.exp(a*(i+1 - (k+1.5)))) for i in range(num_products)] for k in range(num_customers)]
-#     np_utilities = [1/(1 + np.exp(a*(k+1.5))) for k in range(num_customers)]
-#     revenue, inventory_vectors, offered_sets, cumulative_revenue, purchase_probabilities, names = \
-#         simulate_multiple_customer_types(C_i, C_v, prices, utilities, np_utilities, T, num_products, num_customers, num_runs, seed)
-#     base_result[a] = revenue
+# plot_finite_difference(cumulative_revenue, num_runs, names)
 
-# pickle_data = revenue, inventory_vectors, offered_sets, cumulative_revenue, purchase_probabilities, names
+
+# plot_cumulative_revenue(names, cumulative_revenue,num_runs)
+
+
+# pickle_data = revenue, inventory_vectors, offered_sets, cumulative_revenue, names
 #
 # filename = r"saved_data/single_instances/" + title + ".pickle"
 #
@@ -94,80 +139,11 @@ with open(r"saved_data/" + title + ".pickle", 'rb') as f:
     output = pickle.load(f)
 
 
-def plot_revenue_vs(output): #Exclude the optimal policy
-    base_result, names = output
-    names = ["OE", "IB", "DPA", "OP"]
-    domain = sorted(base_result.keys())
-    print(domain)
-    for i in range(len(names)-1):
-        function = [base_result[x][i] / num_runs for x in domain]
-        plt.plot(domain, function, label=names[i])
-    plt.grid()
-    plt.legend()
-    plt.xticks(np.arange(min(domain), max(domain), 0.05))
-    plt.xlabel("Base of Exponential", size=10)
-    plt.ylabel("Average Revenue", size=10)
-    plt.title("Base of Exponential vs Average Revenue", size=15)
-    plt.show()
-
-
-def plot_ratio_optimal(output):
-    base_result, names = output
-    domain = sorted(base_result.keys())
-    names = ["OE", "IB", "DPA", "OP"]
-    for i in range(len(names)-1):
-        function = [base_result[x][i]/base_result[x][2] for x in domain]
-        plt.plot(domain, function, label=names[i])
-    plt.grid()
-    plt.legend()
-    plt.xticks(np.arange(min(domain), max(domain), 0.05))
-    plt.xlabel("Base of Exponential", size=10)
-    plt.ylabel("Performance Ratio", size=10)
-    plt.title("Base of Exponential vs Performance Ratio", size=15)
-    plt.show()
-
 # plot_ratio_optimal(output)
-#
+
+
 # plot_revenue_vs(output)
 
 
-def plot_finite_difference(cumulative_revenue, num_runs, names):
-    differences = []
-    colors = ['C3', 'C4', 'C2', 'C1', 'C4']
-    fig = plt.figure()
-    for x in range(len(names)):
-        differences += [
-            [(cumulative_revenue[x][t + 1] - cumulative_revenue[x][t])/num_runs for t in range(len(cumulative_revenue[x]) - 1)]]
-        plt.plot(np.arange(1, len(differences[x]) + 1, 1), differences[x], label=names[x], color=colors[x])
-    plt.legend(prop={'size':12})
-    plt.grid()
-    plt.title("Average Revenue Per Period", size=25)
-    plt.ylabel("Revenue", size=15)
-    plt.xlabel("Period", size=15)
-    plt.xticks([1, ] + list(np.arange(5, len(differences[0]) + 2, 5)))
-    fig.set_figwidth(15)
-    fig.set_figheight(7.25)
-    plt.show()
 
-# plot_finite_difference(cumulative_revenue, num_runs, names)
-
-def plot_cumulative_revenue(policy_names, cumulative_revenue,num_runs):
-    max_value = np.max([np.argmax(cumulative_revenue[x]) for x in range(len(policy_names))])
-    fig = plt.figure()
-    colors = ['C3', 'C4', 'C2', 'C1', 'C4']
-    for i in range(len(policy_names)):
-        plt.plot(cumulative_revenue[i]/num_runs, label=policy_names[i], color=colors[i])
-    plt.title("Average Revenue vs Period", pad=20, size=25)
-    plt.xlabel("Period", size=15)
-    plt.ylabel("Average Revenue", size=15)
-    plt.legend(prop={'size': 12})
-    plt.grid()
-    fig.set_figwidth(15)
-    fig.set_figheight(7.25)
-    plt.show()
-
-plot_cumulative_revenue(names, cumulative_revenue,num_runs)
-
-# graph_plots(inventory_vectors, names, offered_sets, cumulative_revenue)
-
-# create_gif(names, inventory_vectors, offered_sets, cumulative_revenue, purchase_probabilities, 10, num_runs)
+# graph_inventory_plots(inventory_vectors, names, offered_sets, cumulative_revenue)

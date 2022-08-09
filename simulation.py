@@ -19,96 +19,52 @@ def psi_lib(x):
     return x
 
 
-def simulate_single_customer_type(C_i, prices, utilities, np_utility, T, num_products, num_runs, seed):
-    policies = []
-    policies += [OfferEverything()]
-    policies += [IBPolicy(psi_eib, "Inventory Balancing")]
-    policies += [None]
-    policies += [None]
-    policies += [TopalogluDPOptimal(C_i, prices, utilities, np_utility, T)]
+def simulation(initial_inventory, prices, attractions, generate_arriving_customer_types,
+                                  T, num_runs, seed):
 
+    # Use the same product objects for every single simulation
+    product_list = []
+    num_products = len(prices)
+    for i in range(num_products):
+        product_list += [Product(i, prices[i])]
+    initial_inventory_dict = dict(zip(product_list, initial_inventory))
 
-    names = []
-    revenue = [0]*len(policies)
-    inventory_vectors = [[0]*num_products]*len(policies)
-    offered_sets = [[0]*num_products]*len(policies)
-    cumulative_revenue = [0]*len(policies)
+    customer_list = []
+    for i in range(len(attractions)):
+        product_attractions = dict(zip(product_list, attractions[i]))
+        customer_list += [Customer(i, product_attractions)]
 
-    for i in range(num_runs):
-        simulate = SingleCustomerType(T, num_products, C_i, utilities, prices, seed + i)
-        policies[2] = Clairvoyant(simulate)
-        policies[3] = DPAPolicy(simulate, 1.6)
-        print(i)
-        for j in range(len(policies)):
-            output = simulate.simulation(policies[j])
-            revenue[j] = np.add(revenue[j], output[0])
-            inventory_vectors[j] = np.add(inventory_vectors[j], output[1])
-            offered_sets[j] = np.add(offered_sets[j], output[2])
-            cumulative_revenue[j] = np.add(cumulative_revenue[j], output[3])
-
-    for j in range(len(policies)):
-        names += [str(policies[j])]
-    return revenue, inventory_vectors, offered_sets, cumulative_revenue, names
-
-
-def simulate_period_dependent_preferences(C_i, w_t, w_np, prices, T, num_products, num_runs, seed):
-    simulate = PeriodDependentPreferences(T, w_t, w_np, num_products, C_i, prices, seed)
-    policies = []
-    policies += [OfferEverything()]
-    policies += [IBPolicy(psi_eib, "Inventory Balancing")]
-    policies += [DPAPolicy(simulate, 1.6)]
-
-    names = []
-    revenue = [0] * len(policies)
-    inventory_vectors = [[0] * num_products] * len(policies)
-    offered_sets = [[0] * num_products] * len(policies)
-    purchase_probabilities = [[0] * num_products] * len(policies)
-    cumulative_revenue = [0] * len(policies)
-
-    for i in range(num_runs):
-        simulate = PeriodDependentPreferences(T, w_t, w_np, num_products, C_i, prices, seed+i)
-        policies[2] = DPAPolicy(simulate, 1.6)
-        print(i)
-        for j in range(len(policies)):
-            output = simulate.simulation(policies[j])
-            revenue[j] = np.add(revenue[j], output[0])
-            inventory_vectors[j] = np.add(inventory_vectors[j], output[1])
-            offered_sets[j] = np.add(offered_sets[j], output[2])
-            cumulative_revenue[j] = np.add(cumulative_revenue[j], output[3])
-            purchase_probabilities[j] = np.add(purchase_probabilities[j], output[4])
-
-    for j in range(len(policies)):
-        names += [str(policies[j])]
-    return revenue, inventory_vectors, offered_sets, cumulative_revenue, purchase_probabilities, names
-
-
-def simulate_multiple_customer_types(C_i, C_v, prices, utilities, np_utilities, T, num_products, num_customers, num_runs, seed):
     policies = []
     policies += [OfferEverything()]
     policies += [IBPolicy(psi_eib, "Inventory Balancing")]
     policies += [None]
     # policies += [None]
+#    policies += [TopalogluDPOptimal(initial_inventory, prices, attractions[0], 1, T)]
 
-    names = []
-    revenue = [0] * len(policies)
-    inventory_vectors = [[0] * num_products] * len(policies)
-    offered_sets = [[0] * num_products] * len(policies)
-    purchase_probabilities = [[0] * num_products] * len(policies)
-    cumulative_revenue = [0] * len(policies)
+    num_policies = len(policies)
 
+    cumulative_output = []
     for i in range(num_runs):
-        simulate = MultipleCustomerTypes(T, num_products, num_customers, C_i, C_v, np_utilities, utilities, prices, seed+i)
+        arriving_customer_type = generate_arriving_customer_types(customer_list, seed+i)
+        simulate = DynamicAssortmentOptimizationProblem(product_list, initial_inventory_dict,
+                                                        arriving_customer_type, seed+i)
+        # These policies require recalculation each time the simulation is generated
+        # policies[3] = Clairvoyant(simulate)
         policies[2] = DPAPolicy(simulate, 1.6)
-        # policies[3] = DPOptimal2(simulate)
+
         print(i)
         for j in range(len(policies)):
             output = simulate.simulation(policies[j])
-            revenue[j] = np.add(revenue[j], output[0])
-            inventory_vectors[j] = np.add(inventory_vectors[j], output[1])
-            offered_sets[j] = np.add(offered_sets[j], output[2])
-            cumulative_revenue[j] = np.add(cumulative_revenue[j], output[3])
-            purchase_probabilities[j] = np.add(purchase_probabilities[j], output[4])
+            if i == 0:
+                cumulative_output += [output]
+            else:
+                # We accumulate on the 4 outputs from the problem instance:
+                # revenue, inventory vectors, offered set vector, and cumulative revenue
+                cumulative_output[j] = [np.add(cumulative_output[j][k],output[k]) for k in range(4)]
 
-    for j in range(len(policies)):
-        names += [str(policies[j])]
-    return revenue, inventory_vectors, offered_sets, cumulative_revenue, purchase_probabilities, names
+    revenue = [cumulative_output[i][0] for i in range(num_policies)]
+    inventory_vectors = [cumulative_output[i][1] for i in range(num_policies)]
+    offered_sets = [cumulative_output[i][2] for i in range(num_policies)]
+    cumulative_revenue = [cumulative_output[i][3] for i in range(num_policies)]
+    names = [str(policies[i]) for i in range(num_policies)]
+    return revenue, inventory_vectors, offered_sets, cumulative_revenue, names
