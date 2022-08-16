@@ -2,8 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 
-colors = ['C3', 'C4', 'C2', 'C3', 'C4']
-
 def graph_inventory_plots(inventory_vectors, names, offered_sets, cumulative_revenue):
     figure, axis = plt.subplots(len(names)+1, 1)
     plt.subplots_adjust(hspace=0.8)
@@ -11,7 +9,7 @@ def graph_inventory_plots(inventory_vectors, names, offered_sets, cumulative_rev
     figure.set_figheight(7)
     line_styles = ["solid", "dashed", "dotted"]
     for x in range(len(names)):
-        axis[len(names)].plot(cumulative_revenue[x][:-1], label=names[x], linestyle=line_styles[x], color=colors[x],
+        axis[len(names)].plot(cumulative_revenue[x][:-1], label=names[x], linestyle=line_styles[x],
                               linewidth=2.5)
     axis[len(names)].legend(prop={'size': 8})
     axis[len(names)].set_title('Revenue vs Period', size=15)
@@ -48,7 +46,7 @@ def plot_cumulative_revenue(policy_names, cumulative_revenue,num_runs):
     fig = plt.figure()
     for i in range(len(policy_names)):
         function = [cumulative_revenue[i][x]/num_runs for x in range(len(cumulative_revenue[i]))]
-        plt.plot(function, label=policy_names[i], color=colors[i])
+        plt.plot(function, label=policy_names[i])
     plt.title("Average Revenue vs Period", pad=20, size=25)
     plt.xlabel("Period", size=15)
     plt.ylabel("Average Revenue", size=15)
@@ -65,11 +63,10 @@ def plot_finite_difference(cumulative_revenue, num_runs, names):
     for x in range(len(names)):
         differences += [
             [(cumulative_revenue[x][t + 1] - cumulative_revenue[x][t])/num_runs for t in range(len(cumulative_revenue[x]) - 1)]]
-        plt.plot(np.arange(1, len(differences[x]) + 1, 1), differences[x], label=names[x], color=colors[x])
+        plt.plot(np.arange(1, len(differences[x]) + 1, 1), differences[x], label=names[x])
     plt.legend(prop={'size':12})
     plt.grid()
-    plt.title("Average Revenue Per Period", size=25)
-    plt.ylabel("Revenue", size=15)
+    plt.ylabel("Average Revenue Per Period", size=15)
     plt.xlabel("Period", size=15)
     plt.xticks([1, ] + list(np.arange(5, len(differences[0]) + 2, 5)))
     fig.set_figwidth(15)
@@ -91,15 +88,19 @@ def plot_revenue_vs(revenue_vs_parameter, policy_names, parameter_name, num_runs
         name of the parameter being tested, for display on the graph
     """
     domain = sorted(revenue_vs_parameter.keys())
+    linestyles = ['solid', 'solid', 'dashed', 'solid', 'dotted']
     for i in range(len(policy_names)):
         function = [revenue_vs_parameter[x][i] / num_runs for x in domain]
-        plt.plot(domain, function, label=policy_names[i])
+        plt.plot(domain, function, label=policy_names[i], linestyle = linestyles[i])
     plt.grid()
     plt.legend()
-    plt.xticks(np.arange(min(domain), max(domain), tick_size))
+    plt.xticks(np.arange(0, max(domain)+tick_size, tick_size))
+    # plt.xticks([0, 4, 8], ['(1, 3, 5, 7, 9)', '(5, 5, 5, 5, 5)', '(9, 7, 5, 3, 1)'])
     plt.xlabel(parameter_name, size=12.5)
     plt.ylabel("Average Revenue", size=12.5)
-    plt.title(parameter_name + " vs Average Revenue", size=15)
+    plt.axvline(x = 25, color = 'black')
+
+#    plt.title(parameter_name + " vs Average Revenue", size=15)
     plt.show()
 
 
@@ -118,14 +119,16 @@ def plot_ratio_optimal(revenue_vs_parameter, policy_names, parameter_name, basel
     baseline_policy_index: integer
         index of the policy that the other policies are being compared to
     """
+    colors = ['C1', 'C2', 'C3', 'C4', 'C5']
     domain = sorted(revenue_vs_parameter.keys())
-    for i in range(len(policy_names)):
-        function = [revenue_vs_parameter[x][i]/revenue_vs_parameter[x][baseline_policy_index] for x in domain]
-        plt.plot(domain, function, label=policy_names[i])
+    for i in range(len(policy_names)-1):
+        function = [revenue_vs_parameter[x][i+1]/revenue_vs_parameter[x][baseline_policy_index] for x in domain]
+        plt.plot(domain, function, label=policy_names[i+1], color=colors[i])
     plt.grid()
     plt.legend()
-    plt.xticks(np.arange(min(domain), max(domain), tick_size))
+    plt.axvline(x = 25, color='black')
+    plt.xticks(np.arange(0, max(domain)+tick_size, tick_size))
+    plt.xlabel(parameter_name, size=12.5)
     plt.xlabel(parameter_name, size=12.5)
     plt.ylabel("Performance Ratio", size=12.5)
-    plt.title(parameter_name + " vs Performance Ratio", size=15)
     plt.show()

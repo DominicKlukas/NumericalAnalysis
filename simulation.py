@@ -63,7 +63,11 @@ def simulation(initial_inventory, prices, attractions, generate_arriving_custome
     policies += [IBPolicy(psi_eib)]
     policies += [None]
     policies += [None]
-#    policies += [TopalogluDPOptimal(initial_inventory, prices, attractions[0], 1, T)]
+    policies += [TopK(1)]
+    policies += [TopK(2)]
+    policies += [TopK(3)]
+    policies += [TopK(4)]
+    policies += [TopalogluDPOptimal(initial_inventory, prices, attractions[0], 1, T)]
 
     num_policies = len(policies)
 
@@ -74,9 +78,12 @@ def simulation(initial_inventory, prices, attractions, generate_arriving_custome
                                                         arriving_customer_type, seed+i)
         # These policies require recalculation each time the simulation is generated
         policies[2] = DPAPolicy(simulate, 1.6)
-        policies[3] = Clairvoyant(simulate)
+#        policies[0] = Clairvoyant(simulate)
+        policies[3] = GoogleMinCostClairvoyant(simulate)
+        # policies[4] = DPOptimal2(simulate)
 
-        # print(i)
+        if i % 1000 == 0:
+            print(i)
         for j in range(len(policies)):
             output = simulate.simulation(policies[j])
             if i == 0:

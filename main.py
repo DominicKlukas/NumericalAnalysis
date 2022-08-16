@@ -9,12 +9,15 @@ from graphing_functions import *
 from simulation import *
 import matplotlib.pyplot as plt
 import pickle
+
 np.set_printoptions(threshold=sys.maxsize)
+
+T = 5
 
 
 # These functions generate a list with a customer objects for each period in the selling horizon as elements
 def single_customer_type(customer_list, seed):
-    return [customer_list[0]]*T
+    return [customer_list[0]] * T
 
 
 def randomize_multiple_customer_types(customer_list, variance, T, seed):
@@ -65,7 +68,30 @@ def randomize_multiple_customer_types(customer_list, variance, T, seed):
         z = np.random.permutation(z)
         arriving_customer_types = [customer_list[z[t]] for t in range(T)]
         return arriving_customer_types
+
     return return_function
+
+
+def sequentially_arriving_customer_types(customer_list, seed):
+    num_customers = len(customer_list)
+    segment_length = int(T / num_customers)
+    final_segment = T - segment_length*(num_customers-1)
+    arriving_customer_types = []
+    for i in range(num_customers - 1):
+        arriving_customer_types += [customer_list[i]]*segment_length
+    arriving_customer_types += [customer_list[num_customers-1]]*final_segment
+    return arriving_customer_types
+
+
+def reverse_sequentially_arriving_customer_types(customer_list, seed):
+    num_customers = len(customer_list)
+    segment_length = int(T / num_customers)
+    final_segment = T - segment_length*(num_customers-1)
+    arriving_customer_types = []
+    for i in range(num_customers - 1):
+        arriving_customer_types += [customer_list[num_customers - i - 1]]*segment_length
+    arriving_customer_types += [customer_list[0]]*final_segment
+    return arriving_customer_types
 
 
 # These functions save data as files, so trials which have a long computing time only need to be run once
@@ -118,172 +144,24 @@ def open_parameter_experiment_data(title):
         output = pickle.load(f)
     return output
 
-# Whenever you have a list, ensure that the product's key is equal to the product's index in the list.
-# This is required by TopalogluDPOptimal
 
 num_products = 5
-initial_inventory = [4, ] * num_products
-prices = [1, ] * num_products
-attractions = [[1, ]*num_products]
-seed = 0
-T = 35
-title = "Uniform Initial Inventory, Utility, and Price"
-num_runs = 50000
-
-revenue, inventory_vectors, offered_sets, cumulative_revenue, names = \
-    simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-
-save_single_instance_data(revenue, inventory_vectors, offered_sets, cumulative_revenue, names, title)
-
-print("First test complete")
-
-# Second Test
-title = "Uniform Initial Inventory and Price, Varied Utility"
-revenue_vs_parameter = dict()
-policy_names = ""
-parameter_name = "Base of Exponential"
-T = 20
-for x in np.arange(1, 10.1, 0.5):
-    attractions = [[x**(i-2) for i in range(num_products)]]
-    (revenue, inventory_vectors, offered_sets, cumulative_revenue, names) = \
-        simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-    policy_names = names
-    revenue_vs_parameter[x] = revenue
-
-save_parameter_experiment_data(revenue_vs_parameter,policy_names,parameter_name,num_runs,title)
-
-print("Second test complete")
-
-# Third Test
-title = "Uniform Utility and Price, Varied Initial Inventory"
-revenue_vs_parameter = dict()
-policy_names = ""
-parameter_name = "Initial Inventory"
-attractions = [[1, ]*num_products]
-T = 20
-for x in np.arange(1, 10.1, 1):
-    initial_inventory = [x, ]*num_products
-    (revenue, inventory_vectors, offered_sets, cumulative_revenue, names) = \
-        simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-    policy_names = names
-    revenue_vs_parameter[x] = revenue
-
-save_parameter_experiment_data(revenue_vs_parameter,policy_names,parameter_name,num_runs,title)
-
-print("Third test complete")
-
-# Fourth Test
-title = "Uniform Utility and Price, Uneven Initial Inventory"
-revenue_vs_parameter = dict()
-policy_names = ""
-parameter_name = "Inventory Unevenness Parameter"
-T = 45
-for x in np.arange(0, 4.1, 0.5):
-    initial_inventory = [9 - np.floor(2*x), 9 - np.floor(x), 9, 9+np.floor(x), 9 + 2*np.floor(x)]
-    (revenue, inventory_vectors, offered_sets, cumulative_revenue, names) = \
-        simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-    policy_names = names
-    revenue_vs_parameter[x] = revenue
-
-save_parameter_experiment_data(revenue_vs_parameter,policy_names,parameter_name,num_runs,title)
-
-print("Fourth test complete")
-
-# Fifth Test
-num_products = 20
-initial_inventory = [20, ]*num_products
-prices = [1, ]*num_products
-attractions = [[1, ]*num_products]
-T = 120
-num_runs = 50000
-title = "Large Uniform Initial Inventory, Utility, and Price"
-
-revenue, inventory_vectors, offered_sets, cumulative_revenue, names = \
-    simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-
-save_single_instance_data(revenue, inventory_vectors, offered_sets, cumulative_revenue, names, title)
-
-print("Fifth test complete")
-
-# Sixth Test
-title = "Large Uniform Initial Inventory and Price, Varied Utility"
-revenue_vs_parameter = dict()
-policy_names = ""
-parameter_name = "Base of Exponential"
-T = 100
 initial_inventory = [5, ]*num_products
-for x in np.arange(1, 1.51, 0.05):
-    attractions = [[x**(i-10) for i in range(num_products)]]
-    (revenue, inventory_vectors, offered_sets, cumulative_revenue, names) = \
-        simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-    policy_names = names
-    revenue_vs_parameter[x] = revenue
+prices_list = [[b**(i-2) for i in range(num_products)] for b in [3, 5]]
+attractions_list = [[[x**(i-2) for  i in range(num_products)]] for x in [1/3, 1, 3]]
+inventory_list = [[7, 6, 5, 4, 3], [5, 5, 5, 5, 5], [3, 4, 5, 6, 7]]
+T = 25
+num_runs = 50000
+seed = 0
 
-save_parameter_experiment_data(revenue_vs_parameter,policy_names,parameter_name,num_runs,title)
-
-print("Sixth test complete")
-
-# Seventh Test
-title = "Large Uniform Utility and Price, Varied Initial Inventory"
-revenue_vs_parameter = dict()
-policy_names = ""
-parameter_name = "Initial Inventory"
-attractions = [[1, ]*num_products]
-num_runs = 10000
-for x in np.arange(1, 9.1, 1):
-    initial_inventory = [x, ]*num_products
-    T = 20*x
-    (revenue, inventory_vectors, offered_sets, cumulative_revenue, names) = \
-        simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-    policy_names = names
-    revenue_vs_parameter[x] = revenue
-
-save_parameter_experiment_data(revenue_vs_parameter,policy_names,parameter_name,num_runs,title)
-
-print("Seventh test complete")
-
-# Eighth Test
-title = "Large Uniform Utility and Price, Uneven Initial Inventory"
-revenue_vs_parameter = dict()
-policy_names = ""
-parameter_name = "Inventory Unevenness Parameter"
-num_runs = 1000
-for x in np.arange(0, 0.91, 0.05):
-    initial_inventory = [9 - np.floor(i*x) for i in range(int(num_products/2))] + [9 + np.floor(i*x) for i in range(int(num_products/2))]
-    T = sum(initial_inventory)
-    (revenue, inventory_vectors, offered_sets, cumulative_revenue, names) = \
-        simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-    policy_names = names
-    revenue_vs_parameter[x] = revenue
-
-save_parameter_experiment_data(revenue_vs_parameter,policy_names,parameter_name,num_runs,title)
-
-print("Eighth test complete")
-
-# Ninth Test
-title = "Number of Products"
-revenue_vs_parameter = dict()
-policy_names = ""
-parameter_name = "Inventory Unevenness Parameter"
-num_runs = 1000
-for x in np.arange(10, 30.5, 1):
-    num_products = x
-    initial_inventory = [5, ]*num_products
-    attractions = [[1,]*num_products]
-    T = sum(initial_inventory)
-    (revenue, inventory_vectors, offered_sets, cumulative_revenue, names) = \
-        simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-    policy_names = names
-    revenue_vs_parameter[x] = revenue
-
-save_parameter_experiment_data(revenue_vs_parameter,policy_names,parameter_name,num_runs,title)
-
-print("Finished tests")
-
-# plot_ratio_optimal(revenue_vs_parameter, policy_names, parameter_name, 3, tick_size) # The third policy is the clairvoyant (see simulate)
-
-# plot_revenue_vs(revenue_vs_parameter, policy_names, parameter_name, num_runs, tick_size)
-
-# plot_finite_difference(cumulative_revenue, num_runs, names)
-
-# plot_cumulative_revenue(names, cumulative_revenue,num_runs)
+i = 0
+for prices in prices_list:
+    for attractions in attractions_list:
+        for inventory in inventory_list:
+            print("We have made it to trial "+  str(i))
+            revenue, inventory_vectors, offered_sets, cumulative_revenue, names = \
+                simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
+            output = attractions, initial_inventory, T, revenue, names, num_runs
+            with open(r"experiment_data/" + 'table_of_numbers' + str(i), 'wb') as f:
+                pickle.dump(output, f)
+            i += 1

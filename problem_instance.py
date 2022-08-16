@@ -110,7 +110,7 @@ class DynamicAssortmentOptimizationProblem:
                 [inventory[key_product_dict[i]] if key_product_dict[i] in inventory else 0 for i in
                  range(num_products)]]
             offered_set_vector += [
-                [1 if key_product_dict[i] in offered_set or key_product_dict[i] not in inventory
+                [1 if key_product_dict[i] in offered_set # or key_product_dict[i] not in inventory
                       or self.arriving_customer_type[t].product_attractions[key_product_dict[i]] == 0 else 0 for i in
                  range(num_products)]]
 
