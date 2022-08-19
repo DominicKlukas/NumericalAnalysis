@@ -146,22 +146,16 @@ def open_parameter_experiment_data(title):
 
 
 num_products = 5
-initial_inventory = [5, ]*num_products
-prices_list = [[b**(i-2) for i in range(num_products)] for b in [3, 5]]
-attractions_list = [[[x**(i-2) for  i in range(num_products)]] for x in [1/3, 1, 3]]
-inventory_list = [[7, 6, 5, 4, 3], [5, 5, 5, 5, 5], [3, 4, 5, 6, 7]]
-T = 25
-num_runs = 50000
+inventory = [5, ]*num_products
+prices = [1, ]*num_products
+attractions = [[1, ]*num_products]
+T = sum(inventory)
+num_runs = 1000
 seed = 0
 
-i = 0
-for prices in prices_list:
-    for attractions in attractions_list:
-        for inventory in inventory_list:
-            print("We have made it to trial "+  str(i))
-            revenue, inventory_vectors, offered_sets, cumulative_revenue, names = \
-                simulation(initial_inventory, prices, attractions, single_customer_type, T, num_runs, seed)
-            output = attractions, initial_inventory, T, revenue, names, num_runs
-            with open(r"experiment_data/" + 'table_of_numbers' + str(i), 'wb') as f:
-                pickle.dump(output, f)
-            i += 1
+policies = [OfferEverything, IBPolicy, generate_dpa_class_object(1.6), Clairvoyant]
+
+revenue, inventory_vectors, offered_sets, cumulative_revenue, names = \
+    simulation(policies, inventory, prices, attractions, single_customer_type, T, num_runs, seed)
+
+

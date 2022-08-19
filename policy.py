@@ -2,19 +2,19 @@ import numpy as np
 from scipy.sparse import *
 from decimal import *
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-getcontext().prec = 5000
+from ortools.graph.python import min_cost_flow, max_flow
+getcontext().prec = 500
 
-from ortools.graph.python import min_cost_flow
-from ortools.graph.python import max_flow
-
+"""Each class in this module implements a policy of some type. A policy must have the following features:
+The __init__ method must have the problem instance as its only parameter. 
+"""
 
 class TopalogluDPOptimal:
-    """Computes the optimal sets to offer, using a dynamic programming approach outlined in the Topaloglu paper
+    """Computes the optimal sets to offer, using a dynamic programming approach outlined in the Topaloglu paper.
     Assumes a single customer type.
 
-    Attributes
-    __________
+    The attributes are as follows:
+
     offer_sets: list
         Contains an entry for every period. For every period, contains a dictionary which has as keys every
         possible inventory vector, and as a value a set of integers, which are the product keys to offer
@@ -23,14 +23,17 @@ class TopalogluDPOptimal:
     """
     def __init__(self, initial_inventory, prices, utilities, np_utility, T):
         """
+        If the order of the customer types arriving in the selling horizon does not change, the dynamic program
+        can be solved once and then reused for different problem instances.
+
         Parameters
-        __________
+        ----------
         initial_inventory: list
             the value at each index is the initial inventory of the product whose product key is equal to the index
         prices: list
             the value at each index is the price of the product whose product key is equal to the index
         utilities: list
-            the value at each index is the utilities of the product whose product key is equal to the index
+            the value at each index is the set of utilities of the product whose product key is equal to the index
             where the utilities are assuming that there is a single customer type. Each should be an integer
             since the Decimal package will be applied to it
         np_utility: integer
@@ -127,7 +130,6 @@ class TopalogluDPOptimal:
         else:
             print("This is not the OE policy")
             return False
-
 
     def offer_set(self, inventory, initial_inventory, t, customer):
         inventory_list = [0]*len(self.initial_inventory_tuple)
@@ -302,8 +304,11 @@ class DPOptimal:
 
 class OfferEverything:
     """Class implementing the offer everything policy"""
+    def __init__(self, simulation):
+        pass
 
-    def offer_set(self, inventory, initial_inventory, t, customer):
+    @staticmethod
+    def offer_set(inventory, initial_inventory, t, customer):
         """Returns the assortment of all in stock products
 
         Parameters
@@ -322,6 +327,14 @@ class OfferEverything:
 
     def __str__(self):
         return "OE"
+
+    @staticmethod
+    def customer_type_sensitive():
+        return False
+
+    @staticmethod
+    def problem_instance_sensitive():
+        return False
 
 
 def maximum_revenue_set(customer, adjusted_prices_sorted):
@@ -383,20 +396,14 @@ class IBPolicy:
     __________
     balancing_function: func
         function from [0,1]-->[0,1] which reduces the effective revenue of a product if its inventory is low
-    policy_name: str
-        the name of the policy, considering the balancing function we are using
     """
 
-    def __init__(self, balancing_function):
-        """
-        Parameters
-        __________
-        balancing_function: func
-            function from [0,1]-->[0,1] which reduces the effective revenue of a product if its inventory is low
-        policy_name: str
-            the name of the policy, considering the balancing function we are using
-        """
-        self.balancing_function = balancing_function
+    def __init__(self, policy_instance):
+        def psi_eib(x):
+            psi_c = np.exp(1) / (np.exp(1) - 1)
+            return psi_c * (1 - np.exp(-x))
+
+        self.balancing_function = psi_eib
 
     def offer_set(self, inventory, initial_inventory, t, arriving_customer_type):
         """
@@ -427,12 +434,27 @@ class IBPolicy:
     def __str__(self):
         return "IB"
 
+    @staticmethod
+    def customer_type_sensitive():
+        return False
+
+    @staticmethod
+    def problem_instance_sensitive():
+        return False
+
+
+def generate_dpa_class_object(theta):
+    class DPAReturnClass(DPAPolicy):
+        def __init__(self, problem_instance):
+            DPAPolicy.__init__(self, problem_instance, theta)
+    return DPAReturnClass
+
 
 class DPAPolicy:
     """Class implementing the DPA algorithm, comes from https://doi.org/10.1287/opre.2019.1931
 
-    Attributes
-    __________
+    Attributes:
+
     gamma: list
         stores gamma values for each product, at each period. Recall that gamma values are a crude approximation
         of the expected total revenue that can be extracted from a product at each period. Implemented as a list with
@@ -534,258 +556,16 @@ class DPAPolicy:
     def __str__(self):
         return "DPA"
 
+    @staticmethod
+    def customer_type_sensitive():
+        return True
+
+    @staticmethod
+    def problem_instance_sensitive():
+        return False
+
 
 class Clairvoyant:
-    """ Class implementing the clairvoyant policy, which knows the decisions the customers will make in advance
-
-    Attributes
-    __________
-    offer_set: list
-        with the same length as the selling horizon, and each element contains a set to offer the customers each period
-    """
-    def __init__(self, problem_instance):
-        """
-        Parameters
-        __________
-        problem_instance: DynamicAssortmentOptimizationProblem
-            contains attributes:
-                product_utilities: list
-                    where each element is a list of ordered pairs, where the first element is a product and the second
-                    element of the ordered pair is the utility value for the arriving customer. The list is in descending
-                    order of utility
-                no_purchase_utilities: list
-                    where each element is the utility of not making a purchase, each period
-                initial_inventory: dictionary
-                    where the keys are the products and the values are the initial inventory values
-        """
-        product_utilities = problem_instance.product_utilities
-        no_purchase_utilities = problem_instance.no_purchase_utilities
-        initial_inventory = problem_instance.initial_inventory
-        # The scipy sparse matrix stores each product as an index. This dictionary lets us access the product
-        # afterwards with each of the indices
-        key_product_dict = {p.product_key:p for p in initial_inventory}
-        T = len(product_utilities)
-        num_products = len(initial_inventory)
-
-        # Each arriving customer has a set of products he is willing to buy: the products whose utilities crystallized
-        # to a value higher than the value the no purchase utility crystallized to.
-        # In the paper, the customers are grouped by type, and assigned a population, with one node per type
-        # in the graph. However, we keep them separate so that we can see which product gets sold each period, and
-        # directly compare this information with the other policies.
-        customers = []
-        for t in range(T):
-            customer = []
-            i = 0
-            while i < num_products and product_utilities[t][i][1] > no_purchase_utilities[t]:
-                customer += [product_utilities[t][i][0].product_key]
-                i += 1
-            customers += [customer]
-
-        # In the offer everything paper, each product, and customer, has a node. There is a node from a customer
-        # to a product as long as the utility of that product is higher than the no purchase utility, that is,
-        # if the customer is potentially willing to buy the product if no other more favourable products are available.
-        # Now, in the matrix, each node is represented by an index. If there are m customers, we let the node indices
-        # of the customers be 0, ..., m-1. For the n products, we let m, ..., m+n-1 be the node indices of products
-        # These dictionaries allow us to access the product keys from the node indices, and vice versa.
-        product_node_index = dict()
-        node_index_product = dict()
-
-        # There are T customers, so we assign node indices T to T+n to the products.
-        i = T
-        for p in initial_inventory:
-            product_node_index[p.product_key] = i
-            node_index_product[i] = p
-            i += 1
-
-        # The flow problem will have a single sink and a single source. The source is connected to the
-        # customers, the customers are connected to the products which they are willing to buy,
-        # and the sink is connected to the products. A customer buys a product if there is some flow
-        # going from that customer to a product. Each customer can only buy one product, so there is an
-        # arc capacity limit of 1 from the source node to each customer node.
-        source_index = i
-        sink_index = i + 1
-
-        # All three of these lists will have the same length. For any index i, the rows list entry i
-        # is the index of the source node of the edge, the column list entry contains the index of the
-        # sink node, and the data list entry i contains the arc capacity for that edge.
-        na_matrix_rows = []
-        na_matrix_cols = []
-        na_matrix_data = []
-
-        # generate the edges as described
-        for t in range(T):
-            for p in customers[t]:
-                na_matrix_rows += [t]
-                na_matrix_cols += [product_node_index[p]]
-                na_matrix_data += [1]
-
-        for t in range(T):
-            na_matrix_rows += [source_index]
-            na_matrix_cols += [t]
-            na_matrix_data += [1]
-
-        for p, x in initial_inventory.items():
-            na_matrix_rows += [product_node_index[p.product_key]]
-            na_matrix_cols += [sink_index]
-            na_matrix_data += [x]
-
-        # create and solve the matrix
-        na_matrix = csr_matrix((na_matrix_data, (na_matrix_rows, na_matrix_cols)),
-                               shape=(sink_index + 1, sink_index + 1))
-        dictionary_of_keys_graph = csgraph.maximum_flow(na_matrix, source_index, sink_index).residual.todok()
-        # convert the dictionary of keys scipy cs-graph format into a real dictionary
-        graph_edges = dictionary_of_keys_graph.keys()
-        graph_dictionary = dict()
-        for k in graph_edges:
-            graph_dictionary[k] = dictionary_of_keys_graph.get(k)
-        # We loop through the edges. For all the edges from a given customer to products, at most one of them will
-        # not be 0. We search these edges, and if one of them has flow 1, then it means that the optimal solution
-        # has the customer arriving at period t buy that product, so we add it as the sole member of the set offered
-        # that period, so that the customer doesn't buy any other products instead
-        offer_sets = []
-        for t in range(T):
-            period_t_set = set()
-            for x in customers[t]:
-                if graph_dictionary[(t, product_node_index[x])] == 1:
-                    period_t_set.add(key_product_dict[x])
-            offer_sets += [period_t_set]
-        self.offer_sets = offer_sets
-
-    def offer_set(self, inventory, initial_inventory, t, sale_horizon):
-        return self.offer_sets[t]
-
-    def __str__(self):
-        return "CLV"
-
-
-# Much faster than scipy!
-class GoogleClairvoyant:
-    """ Class implementing the clairvoyant policy, which knows the decisions the customers will make in advance
-
-        Attributes
-        __________
-        offer_set: list
-            with the same length as the selling horizon, and each element contains a set to offer the customers each period
-        """
-
-    def __init__(self, problem_instance):
-        """
-        Parameters
-        __________
-        problem_instance: DynamicAssortmentOptimizationProblem
-            contains attributes:
-                product_utilities: list
-                    where each element is a list of ordered pairs, where the first element is a product and the second
-                    element of the ordered pair is the utility value for the arriving customer. The list is in descending
-                    order of utility
-                no_purchase_utilities: list
-                    where each element is the utility of not making a purchase, each period
-                initial_inventory: dictionary
-                    where the keys are the products and the values are the initial inventory values
-        """
-        product_utilities = problem_instance.product_utilities
-        no_purchase_utilities = problem_instance.no_purchase_utilities
-        initial_inventory = problem_instance.initial_inventory
-        # The Google OR solver requires each node to have a unique index. This dictionary lets us access the product
-        # afterwards given its index
-        key_product_dict = {p.product_key: p for p in initial_inventory}
-        T = len(product_utilities)
-        num_products = len(initial_inventory)
-
-        # Each arriving customer has a set of products he is willing to buy: the products whose utilities crystallized
-        # to a value higher than the value the no purchase utility crystallized to.
-        # In the paper, the customers are grouped by type, and assigned a population, with one node per type
-        # in the graph. However, we keep them separate so that we can see which product gets sold each period, and
-        # directly compare this information with the other policies.
-        customers = []
-        for t in range(T):
-            customer = []
-            i = 0
-            while i < num_products and product_utilities[t][i][1] > no_purchase_utilities[t]:
-                customer += [product_utilities[t][i][0].product_key]
-                i += 1
-            customers += [customer]
-
-        # In the offer everything paper, each product, and customer, has a node. There is a node from a customer
-        # to a product as long as the utility of that product is higher than the no purchase utility, that is,
-        # if the customer is potentially willing to buy the product if no other more favourable products are available.
-        # Now, in the matrix, each node is represented by an index. If there are m customers, we let the node indices
-        # of the customers be 0, ..., m-1. For the n products, we let m, ..., m+n-1 be the node indices of products
-        # These dictionaries allow us to access the product keys from the node indices, and vice versa.
-        product_node_index = dict()
-        node_index_product = dict()
-
-        # There are T customers, so we assign node indices T to T+n to the products.
-        i = T
-        for p in initial_inventory:
-            product_node_index[p.product_key] = i
-            node_index_product[i] = p
-            i += 1
-
-        # The flow problem will have a single sink and a single source. The source is connected to the
-        # customers, the customers are connected to the products which they are willing to buy,
-        # and the sink is connected to the products. A customer buys a product if there is some flow
-        # going from that customer to a product. Each customer can only buy one product, so there is an
-        # arc capacity limit of 1 from the source node to each customer node.
-        source_index = i
-        sink_index = i + 1
-
-        # All three of these lists will have the same length. For any index i, the rows list entry i
-        # is the index of the source node of the edge, the column list entry contains the index of the
-        # sink node, and the data list entry i contains the arc capacity for that edge.
-        na_matrix_rows = []
-        na_matrix_cols = []
-        na_matrix_data = []
-
-        # generate the edges as described
-        for t in range(T):
-            for p in customers[t]:
-                na_matrix_rows += [t]
-                na_matrix_cols += [product_node_index[p]]
-                na_matrix_data += [1]
-
-        for t in range(T):
-            na_matrix_rows += [source_index]
-            na_matrix_cols += [t]
-            na_matrix_data += [1]
-
-        for p, x in initial_inventory.items():
-            na_matrix_rows += [product_node_index[p.product_key]]
-            na_matrix_cols += [sink_index]
-            na_matrix_data += [x]
-
-        # create and solve the matrix
-        smf = max_flow.SimpleMaxFlow()
-        smf.add_arcs_with_capacity(na_matrix_rows, na_matrix_cols, na_matrix_data)
-        smf.solve(source_index, sink_index)
-
-        #dictionary of edges
-        graph_dictionary = dict()
-        for i in range(smf.num_arcs()):
-            graph_dictionary[(smf.tail(i), smf.head(i))] = smf.flow(i)
-
-        # We loop through the edges. For all the edges from a given customer to products, at most one of them will
-        # not be 0. We search these edges, and if one of them has flow 1, then it means that the optimal solution
-        # has the customer arriving at period t buy that product, so we add it as the sole member of the set offered
-        # that period, so that the customer doesn't buy any other products instead
-        offer_sets = []
-        for t in range(T):
-            period_t_set = set()
-            for x in customers[t]:
-                if graph_dictionary[(t, product_node_index[x])] == 1:
-                    period_t_set.add(key_product_dict[x])
-            offer_sets += [period_t_set]
-        self.offer_sets = offer_sets
-
-    def offer_set(self, inventory, initial_inventory, t, sale_horizon):
-        return self.offer_sets[t]
-
-    def __str__(self):
-        return "GoogleCLV"
-
-
-# Much faster than scipy!
-class GoogleMinCostClairvoyant:
     """ Class implementing the clairvoyant policy, which knows the decisions the customers will make in advance
 
             Attributes
@@ -924,12 +704,26 @@ class GoogleMinCostClairvoyant:
         return self.offer_sets[t]
 
     def __str__(self):
-        return "GoogleMinCostFlow"
+        return "CLV"
 
+    @staticmethod
+    def customer_type_sensitive():
+        return True
+
+    @staticmethod
+    def problem_instance_sensitive():
+        return True
+
+
+def generate_topk_class_object(k):
+    class TopKReturnClass(TopK):
+        def __init__(self, problem_instance):
+            TopK.__init__(self, problem_instance, k)
+    return TopKReturnClass
 
 
 class TopK:
-    def __init__(self, k):
+    def __init__(self, problem_instance, k):
         self.k = k
 
     def offer_set(self, inventory, initial_inventory, t, sale_horizon):
@@ -942,3 +736,11 @@ class TopK:
 
     def __str__(self):
         return "TopK " + str(self.k)
+
+    @staticmethod
+    def customer_type_sensitive():
+        return False
+
+    @staticmethod
+    def problem_instance_sensitive():
+        return False

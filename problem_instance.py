@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 
 class DynamicAssortmentOptimizationProblem:
     """Class representing a problem instance, for a dynamic assortment optimization problem
+
     Attributes
     __________
     product_utilities: list
@@ -64,22 +65,23 @@ class DynamicAssortmentOptimizationProblem:
     def simulation(self, policy):
         """ Runs the simulation on the problem instance.
         Parameters
-        __________
+        ----------
         policy: policy
             which makes the sale decisions during the simulation
 
         Returns
-        _______
-        revenue: integer
-            containing the revenue earned by the policy over the selling horizon
-        inventory_vectors: list
-            containing a list of inventory values for each period
-        offered_set_vector: list
-            containing a list, with the length of the number of products for each period. This list contains
-            a 0 for each product key where the product is withheld from the customer despite being available, and
-            a 1 otherwise.
-        cumulative_revenue: list
-            for each period, contains the revenue earned up to that period
+        -------
+        tuple
+            revenue: integer
+                containing the revenue earned by the policy over the selling horizon
+            inventory_vectors: list
+                containing a list of inventory values for each period
+            offered_set_vector: list
+                containing a list, with the length of the number of products for each period. This list contains
+                a 0 for each product key where the product is withheld from the customer despite being available, and
+                a 1 otherwise.
+            cumulative_revenue: list
+                for each period, contains the revenue earned up to that period
         """
         revenue = 0
         inventory = self.initial_inventory.copy()
