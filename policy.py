@@ -21,7 +21,7 @@ class TopalogluDPOptimal:
     initial_inventory_tuple: tuple
         Contains the initial inventory values
     """
-    def __init__(self, initial_inventory, prices, utilities, np_utility, T):
+    def __init__(self, initial_inventory, prices, utilities, np_utility, T, problem_instance):
         """
         If the order of the customer types arriving in the selling horizon does not change, the dynamic program
         can be solved once and then reused for different problem instances.
@@ -39,7 +39,6 @@ class TopalogluDPOptimal:
         np_utility: integer
             utility of the no purchase option for the customer in question
         """
-
         # vee stores the optimal revenue at each time&inventory level
         vee = []
         # offer sets stores the set of product keys to offer at each time&inventory level
@@ -708,7 +707,7 @@ class Clairvoyant:
 
     @staticmethod
     def customer_type_sensitive():
-        return True
+        return False
 
     @staticmethod
     def problem_instance_sensitive():

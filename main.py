@@ -9,6 +9,8 @@ from graphing_functions import *
 from simulation import *
 import matplotlib.pyplot as plt
 import pickle
+import pandas as pd
+import openpyxl
 
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -145,17 +147,76 @@ def open_parameter_experiment_data(title):
     return output
 
 
-num_products = 5
-inventory = [5, ]*num_products
-prices = [1, ]*num_products
-attractions = [[1, ]*num_products]
-T = sum(inventory)
-num_runs = 1000
-seed = 0
+def create_excel_table(policies, prices_list, inventory_list, attractions_list, sale_horizon_length_list,
+                       num_runs, customer_type_generating_function, baseline_policy_index, filepath, seed):
+    """
+    Function that generates an exel table of results, for a set of experiments, where each row's experiments are
+     run with a parameters permuted through every combination of the lists of parameters provided in the arguments.
+    The exel table has a column for each
+    The total revenue for one baseline policy and the ratio of the revenue between each other policy and the
+    baseline revenue is displayed.
 
+    Args:
+        policies:
+            A list of class objects, where each class is a policy implementation. The class gets
+            instantiated in simulation.py, where it receives the required randomly generated customers
+            and parameters for each trial
+        prices_list:
+            List of lists, where each list is the list of prices for the products.
+        inventory_list:
+            List of lists, where each list is the initial inventory levels for the products.
+        attractions_list:
+            A list of a list of a list. We permute through each list of lists. Each list of lists represents
+            a set of customer types, where each customer type is given by a list of attraction values attributed
+            to each product.
+        sale_horizon_length_list:
+            function of the initial inventory, which generates a list of selling horizon lengths to permute through
+        num_runs:
+            number of trials for each experiment
+        customer_type_generating_function:
+            function which determines how the different customer types defined in each element of attractions_list are
+            distributed over the selling horizon
+        baseline_policy_index:
+            index of the policy in policies which the other policies should be compared to
+        filepath:
+            pathname of the file to output
+        seed:
+            Integer which uniquely determines the outcome of the simulation
+
+    Returns:
+        Generates an excel spreadsheet
+    """
+    data = [['Prices', 'Attractions', 'Initial Inventory', 'T', 'Baseline Policy'] + ['' for x in range(len(policies))]]
+    print(data)
+    for prices in prices_list:
+        for attractions in attractions_list:
+            for inventory in inventory_list:
+                for T in sale_horizon_length_list(inventory):
+                    revenue, inventory_vectors, offered_sets, cumulative_revenue, names, revenues_for_each_experiment = \
+                        simulation(policies, inventory, prices, attractions, customer_type_generating_function, T, num_runs, seed)
+                    data[0][-len(policies):] = names
+                    data += [[tuple(prices), tuple(attractions[0]), tuple(inventory), T, revenue[0] / num_runs]
+                             + [revenue[n] / revenue[baseline_policy_index] for n in range(len(policies))]]
+    # convert your array into a dataframe
+    df = pd.DataFrame(data)
+    # save to xlsx file
+    df.to_excel(filepath, index=False, header=False)
+
+
+num_products = 5
+initial_inventory_list = [[1, 1, 1, 1, 1], [5, 5, 5, 5, 5], [10, 10, 10, 10, 10],
+                          [9, 7, 5, 3, 1], [7, 6, 5, 4, 3], [3, 4, 5, 6, 7],[1, 3, 5, 7, 9]]
+prices_list = [[1, ]*num_products]
+attractions_list = [[[1, ]*num_products], [[0.25, 0.5, 1, 2, 4]], [[1/9, 1/3, 1, 3, 9]]]
+num_runs = 100000
+seed = 0
+cp_index = 0
+filepath = '/Users/dominic/Desktop/table 1 results Clairvoyant.xlsx'
 policies = [OfferEverything, IBPolicy, generate_dpa_class_object(1.6), Clairvoyant]
 
-revenue, inventory_vectors, offered_sets, cumulative_revenue, names = \
-    simulation(policies, inventory, prices, attractions, single_customer_type, T, num_runs, seed)
+def sale_horizon_length(inventory):
+    return [sum(inventory)]
 
+create_excel_table(policies, prices_list, initial_inventory_list, attractions_list, sale_horizon_length, num_runs,
+                   single_customer_type, cp_index, filepath, seed)
 

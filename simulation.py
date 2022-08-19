@@ -64,29 +64,31 @@ def simulation(policy_generators, initial_inventory, prices, attractions, genera
     cumulative_output = []
     policies = []
     previous_arriving_customer_type = None
+    customer_type_sensitive_policy_indices = []
+    problem_instance_sensitive_policy_indices = []
+    revenues_for_each_experiment = []
     for i in range(num_runs):
+        if i % 1000 == 0:
+            print(i)
         arriving_customer_type = generate_arriving_customer_types(customer_list, seed+i)
         simulate = DynamicAssortmentOptimizationProblem(product_list, initial_inventory_dict,
                                                         arriving_customer_type, seed+i)
 
-        # Some of the policies need to do some pre-calculation for specific problem instances, or only if the
+        # Some policies need to do pre-calculation for specific problem instances, or only if the
         # sequence of customer type changes. We deal with this here.
         if i == 0:
             for k in range(num_policies):
                 policies += [policy_generators[k](simulate)]
-        else:
-            same_customer_types = True
-            for x in range(len(previous_arriving_customer_type)):
-                if previous_arriving_customer_type[x] != arriving_customer_type[x]:
-                    same_customer_types = False
-                    break
-            if not same_customer_types:
-                for k in range(num_policies):
-                    if policies[k].customer_type_sensitive():
-                        policies[k] = policy_generators[k](simulate)
-            for k in range(num_policies):
+                if policies[k].customer_type_sensitive():
+                    customer_type_sensitive_policy_indices += [k]
                 if policies[k].problem_instance_sensitive():
+                    problem_instance_sensitive_policy_indices += [k]
+        else:
+            if not check_customer_arrivals_same(previous_arriving_customer_type, arriving_customer_type):
+                for k in customer_type_sensitive_policy_indices:
                     policies[k] = policy_generators[k](simulate)
+            for k in problem_instance_sensitive_policy_indices:
+                policies[k] = policy_generators[k](simulate)
 
         previous_arriving_customer_type = arriving_customer_type
 
@@ -95,15 +97,26 @@ def simulation(policy_generators, initial_inventory, prices, attractions, genera
             if i == 0:
                 # np.add can only be used with an array that is already initialized
                 cumulative_output += [output]
+                revenues_for_each_experiment += [[output[0]]]
             else:
                 # We accumulate on the 4 outputs from the problem instance:
                 # revenue, inventory vectors, offered set vector, and cumulative revenue
                 # from the current run to all of the previous runs
                 cumulative_output[j] = [np.add(cumulative_output[j][k],output[k]) for k in range(4)]
+                revenues_for_each_experiment[j] += [output[0]]
 
     revenue = [cumulative_output[i][0] for i in range(num_policies)]
     inventory_vectors = [cumulative_output[i][1] for i in range(num_policies)]
     offered_sets = [cumulative_output[i][2] for i in range(num_policies)]
     cumulative_revenue = [cumulative_output[i][3] for i in range(num_policies)]
     names = [str(policies[i]) for i in range(num_policies)]
-    return revenue, inventory_vectors, offered_sets, cumulative_revenue, names
+    return revenue, inventory_vectors, offered_sets, cumulative_revenue, names, revenues_for_each_experiment
+
+
+def check_customer_arrivals_same(previous_arriving_customer_type, arriving_customer_type):
+    same_customer_types = True
+    for x in range(len(previous_arriving_customer_type)):
+        if previous_arriving_customer_type[x] != arriving_customer_type[x]:
+            same_customer_types = False
+            break
+    return same_customer_types
