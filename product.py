@@ -6,17 +6,19 @@ class Product:
     product_key: int
         an integer used to identify the product
     price: int
-        price of the product, equal to revenue earned when sold
+        price of the product, equal to revenue earned when sold. Must be an integer, otherwise some
+        policies may not work as expected.
     """
 
     def __init__(self, product_key, price):
         """
         Parameters
-        __________
-        product_key: int
+        ----------
+        product_key:
             an integer used to identify the product
-        price: int
-            Price of the product, equal to revenue earned when sold
+        price:
+            Price of the product, equal to revenue earned when sold. Must be an integer otherwise
+            some policies may not work as expected
         """
         self.product_key = product_key
         self.price = price
